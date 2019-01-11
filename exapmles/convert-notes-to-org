@@ -1,0 +1,59 @@
+#! /usr/bin/python3
+
+import sys
+from latexparse import (
+        CSNAME_TO_ARG_COUNTS as CSNAME_TO_ARG_COUNTS_BASE,
+        parse_latex, Mapper)
+
+CSNAME_TO_ARG_COUNTS = CSNAME_TO_ARG_COUNTS_BASE.copy()
+
+CSNAME_TO_ARG_COUNTS.update({
+        "urcornerlinkdemo": (2, 0),
+        "dblurcornerlinkdemo": (2, 0),
+        "dblurcornerlinkinclass": (2, 0),
+        "urcornerlinkdemoinclass": (2, 0),
+        "urcornerlinkinclass": (2, 0),
+
+        "lgcond": (1, 0),
+        "algcond": (1, 0),
+        "tlgcond": (1, 0),
+        "tmdcond": (1, 0),
+        "mdcond": (1, 0),
+        "atsmcond": (1, 0),
+        "asmcond": (1, 0),
+        "smcond": (1, 0),
+        "sitem": (1, 0),
+        "mitem": (1, 0),
+        "litem": (1, 0),
+        "coloremph": (1, 0),
+        "fillnum": (1, 0),
+        "Vec": (1, 0),
+        "fl": (1, 0),
+        "emach": (0, 0),
+        "argmin": (0, 0),
+        "B": (1, 0),
+        "T": (0, 0),
+        "filufil": (2, 0),
+        "blomat": (1, 0),
+        "bomat": (1, 0),
+        "blmat": (1, 0),
+        "brmat": (1, 0),
+        "bmat": (1, 0),
+        "dee": (0, 0),
+        })
+
+
+def main():
+    docs = []
+    for fname in sys.argv[1:]:
+        with open(fname, "r") as inf:
+            docs.append(parse_latex(
+                inf.read(),
+                csname_to_arg_counts=CSNAME_TO_ARG_COUNTS))
+
+    for doc in docs:
+        print(doc)
+
+
+if __name__ == "__main__":
+    main()
