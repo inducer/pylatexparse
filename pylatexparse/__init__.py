@@ -1,3 +1,25 @@
+__copyright__ = "Copyright (C) 2019 Andreas Kloeckner"
+
+__license__ = """
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+"""
+
 import re
 
 CSEQ_RE = re.compile(r"\\(,|;|\\|\(|\)|\{|\}| |\[|\]|\"|[a-zA-Z*]+)")
@@ -367,7 +389,7 @@ def make_container(iterable):
 # {{{ tokenizer
 
 def tokenize(
-        s, i, csname_to_arg_counts,
+        s, i, csname_to_arg_counts, envname_to_arg_counts,
         in_optional_arg=False, end_i_box=None):
 
     cur_str = []
@@ -393,7 +415,8 @@ def tokenize(
             i += 1
             yield Group(list(tokenize(
                 s, i, end_i_box=i_box,
-                csname_to_arg_counts=csname_to_arg_counts)))
+                csname_to_arg_counts=csname_to_arg_counts,
+                envname_to_arg_counts=envname_to_arg_counts)))
             i = i_box[0]
 
         elif c == "}" or (c == "]" and in_optional_arg):
@@ -445,7 +468,8 @@ def tokenize(
                             make_container(tokenize(
                                 s, i+1, end_i_box=i_box,
                                 in_optional_arg=True,
-                                csname_to_arg_counts=csname_to_arg_counts)))
+                                csname_to_arg_counts=csname_to_arg_counts,
+                                envname_to_arg_counts=envname_to_arg_counts)))
                     i = i_box[0]
                     nopt_args -= 1
                 else:
@@ -458,7 +482,8 @@ def tokenize(
                     args.append(make_container(
                         tokenize(
                             s, i+1, end_i_box=i_box,
-                            csname_to_arg_counts=csname_to_arg_counts)))
+                            csname_to_arg_counts=csname_to_arg_counts,
+                            envname_to_arg_counts=envname_to_arg_counts)))
                     i = i_box[0]
                     nargs -= 1
                 else:
@@ -479,12 +504,16 @@ def tokenize(
 # }}}
 
 
-def parse_latex(s, csname_to_arg_counts=None):
+def parse_latex(s, csname_to_arg_counts=None, envname_to_arg_counts=None):
     if csname_to_arg_counts is None:
         csname_to_arg_counts = CSNAME_TO_ARG_COUNTS
+    if envname_to_arg_counts is None:
+        envname_to_arg_counts = ENVNAME_TO_ARG_COUNTS
 
     doc = LatexDocContainer(tuple(tokenize(
-        s, i=0, csname_to_arg_counts=csname_to_arg_counts)))
+        s, i=0,
+        csname_to_arg_counts=csname_to_arg_counts,
+        envname_to_arg_counts=envname_to_arg_counts)))
     doc = EnvironmentGatherer().rec(doc)
     return doc
 

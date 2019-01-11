@@ -14,7 +14,7 @@ setup(name="pylatexparse",
           'Intended Audience :: Science/Research',
           'License :: OSI Approved :: MIT License',
           'Natural Language :: English',
-          'Programming Language :: Python',
+          'Programming Language :: Python :: 3',
           'Topic :: Utilities',
           ],
 
