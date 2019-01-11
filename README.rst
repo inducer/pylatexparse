@@ -18,6 +18,6 @@ to be supplied.
 
 https://github.com/inducer/pylatexparse
 
-(C) 2019 Andreas Kloeckner
+Copyright 2019 Andreas Kloeckner
 
 Released under the MIT License
