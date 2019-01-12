@@ -1,9 +1,9 @@
-#! /usr/bin/python3
+#! /usr/bin/env python3
 
 import sys
-from latexparse import (
+from pylatexparse import (
         CSNAME_TO_ARG_COUNTS as CSNAME_TO_ARG_COUNTS_BASE,
-        parse_latex, Mapper)
+        parse_latex, Mapper, ControlSequence)
 
 CSNAME_TO_ARG_COUNTS = CSNAME_TO_ARG_COUNTS_BASE.copy()
 
@@ -43,16 +43,128 @@ CSNAME_TO_ARG_COUNTS.update({
         })
 
 
+class OrgPrinter(Mapper):
+    def __init__(self):
+        self.itemize_level = -1
+        self.result = []
+
+    def print(self, s):
+        self.result.append(s)
+        self.result.append("\n")
+
+    def eprint(self, s):
+        self.result.append(str(s))
+
+    def ensure_newline(self):
+        if self.result[-1][-1] != "\n":
+            self.result.append("\n")
+
+    def map_eol(self, node):
+        if self.itemize_level > 0:
+            self.print("  "*self.itemize_level)
+        self.result.append("\n")
+
+    def map_container(self, node):
+        for ch in node.content:
+            self.rec(ch)
+
+    def map_text(self, node):
+        assert "\n" not in node.text
+        self.eprint(node.text)
+
+    def map_group(self, node):
+        if (node.content
+                and isinstance(node.content[0], ControlSequence)
+                and node.content[0].name == "it"):
+            self.eprint("/")
+            for ch in node.content[1:]:
+                self.rec(ch)
+            self.eprint("/")
+
+        elif (node.content
+                and isinstance(node.content[0], ControlSequence)
+                and node.content[0].name == "bf"):
+            self.eprint("*")
+            for ch in node.content[1:]:
+                self.rec(ch)
+            self.eprint("*")
+
+        else:
+            self.eprint(str(node))
+
+    def map_controlseq(self, node):
+        if node.name in ["subtitle", "date"]:
+            self.eprint(node,)
+        elif node.name == "section":
+            self.ensure_newline()
+            self.print(f"** {node.args[0]}")
+        elif node.name == "subsection":
+            # FIXME!
+            self.ensure_newline()
+            self.print(f"*** {node.args[0]}")
+        elif node.name in ["item", "sitem", "mitem"]:
+            self.ensure_newline()
+            self.eprint(f"{' '*2*self.itemize_level}- ")
+        elif node.name in ["algcond", "lgcond"]:
+            self.ensure_newline()
+            size_from_csname = {
+                    "algcond": r"\lghide",
+                    "lgcond": r"\lghide",
+                    }
+
+            self.print(
+                    "#+LATEX: "
+                    rf"\begin{{hidden}}[{size_from_csname[node.name]}]")
+            for ch in node.args:
+                self.rec(ch)
+            self.ensure_newline()
+            self.print(r"#+LATEX: \end{hidden}")
+
+        elif node.name in ["\"", "coloremph", "fillnum"]:
+            self.eprint(str(node))
+        else:
+            raise NotImplementedError(
+                    rf"do not know how to handle '\{node.name}'")
+
+    def map_environment(self, node):
+        if node.name == "frame":
+            if "titlepage" in str(node):
+                return
+
+            self.ensure_newline()
+            if node.args:
+                self.print(f"*** {node.args[0]}")
+            else:
+                self.print(f"*** (no title)")
+            for ch in node.content:
+                self.rec(ch)
+
+        elif node.name == "itemize":
+            self.itemize_level += 1
+            for ch in node.content:
+                self.rec(ch)
+            self.itemize_level -= 1
+
+        else:
+            raise NotImplementedError(
+                    rf"do not know how to handle '{node.name}' env")
+
+
 def main():
-    docs = []
     for fname in sys.argv[1:]:
         with open(fname, "r") as inf:
-            docs.append(parse_latex(
+            print("# " + (73*"-"))
+            print(f"# {fname}")
+            print("# " + (73*"-"))
+            doc = parse_latex(
                 inf.read(),
-                csname_to_arg_counts=CSNAME_TO_ARG_COUNTS))
+                csname_to_arg_counts=CSNAME_TO_ARG_COUNTS)
 
-    for doc in docs:
-        print(doc)
+            org_printer = OrgPrinter()
+            try:
+                org_printer.rec(doc)
+            finally:
+                print("".join(org_printer.result))
 
 
 if __name__ == "__main__":
