@@ -406,6 +406,9 @@ def tokenize(
         if c == "%":
             while s[i] != "\n" and i < len(s):
                 i += 1
+            if i < len(s):
+                # skip the newline
+                i += 1
 
         elif c == "\n":
             if "".join(cur_str):
