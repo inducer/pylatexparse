@@ -407,15 +407,17 @@ def tokenize(
             while s[i] != "\n" and i < len(s):
                 i += 1
 
-        elif c == "\\n":
-            yield Text("".join(cur_str))
+        elif c == "\n":
+            if "".join(cur_str):
+                yield Text("".join(cur_str))
             del cur_str[:]
 
             yield EndOfLine()
             i += 1
 
         elif c == "{":
-            yield Text("".join(cur_str))
+            if "".join(cur_str):
+                yield Text("".join(cur_str))
             del cur_str[:]
 
             i_box = [None]
@@ -427,7 +429,8 @@ def tokenize(
             i = i_box[0]
 
         elif c == "}" or (c == "]" and in_optional_arg):
-            yield Text("".join(cur_str))
+            if "".join(cur_str):
+                yield Text("".join(cur_str))
             del cur_str[:]
 
             if end_i_box is not None:
@@ -435,7 +438,8 @@ def tokenize(
             return
 
         elif c == "\\":
-            yield Text("".join(cur_str))
+            if "".join(cur_str):
+                yield Text("".join(cur_str))
             del cur_str[:]
 
             cseq_match = CSEQ_RE.match(s, i)
@@ -506,7 +510,8 @@ def tokenize(
             cur_str.append(c)
             i += 1
 
-    yield Text("".join(cur_str))
+    if "".join(cur_str):
+        yield Text("".join(cur_str))
 
 # }}}
 
