@@ -30,31 +30,7 @@ ENVNAME_RE = re.compile(r"([a-zA-Z*]+)\s*}")
 
 class LatexDoc:
     def __str__(self):
-        raise NotImplementedError
-
-
-class LatexDocContainer:
-    def __init__(self, content):
-        self.content = content
-
-    def __str__(self):
-        return "".join(str(i) for i in self.content)
-
-    mapper_method = "map_container"
-
-
-class EndOfLine(LatexDoc):
-    def __str__(self):
-        return "\n"
-
-    mapper_method = "map_eol"
-
-
-class Group(LatexDocContainer):
-    def __str__(self):
-        return r"{%s}" % super().__str__()
-
-    mapper_method = "map_group"
+        return StringifyMapper().rec(self)
 
 
 class Text(LatexDoc):
@@ -67,6 +43,21 @@ class Text(LatexDoc):
     mapper_method = "map_text"
 
 
+class EndOfLine(LatexDoc):
+    mapper_method = "map_eol"
+
+
+class LatexDocContainer(LatexDoc):
+    def __init__(self, content):
+        self.content = content
+
+    mapper_method = "map_container"
+
+
+class Group(LatexDocContainer):
+    mapper_method = "map_group"
+
+
 class ControlSequence(LatexDoc):
     def __init__(self, name, args, optargs=None):
         self.name = name
@@ -74,20 +65,6 @@ class ControlSequence(LatexDoc):
         if optargs is None:
             optargs = ()
         self.optargs = optargs
-
-    def __str__(self):
-        args = (
-            "".join("[%s]" % str(arg) for arg in self.optargs)
-            +
-            "".join("{%s}" % str(arg) for arg in self.args)
-            )
-
-        if not args:
-            args = " "
-
-        return r"\%s%s" % (
-                self.name,
-                args)
 
     mapper_method = "map_controlseq"
 
@@ -98,16 +75,6 @@ class Environment(LatexDocContainer):
         super().__init__(content)
         self.args = args
         self.optargs = optargs
-
-    def __str__(self):
-        args = (
-            "".join("[%s]" % str(arg) for arg in self.optargs)
-            +
-            "".join("{%s}" % str(arg) for arg in self.args)
-            )
-
-        return r"\begin{%s}%s%s\end{%s}" % (
-                self.name, args, super().__str__(), self.name)
 
     mapper_method = "map_environment"
 
@@ -120,6 +87,46 @@ class Environment(LatexDocContainer):
 class Mapper:
     def rec(self, node, *args):
         return getattr(self, node.mapper_method)(node, *args)
+
+
+class StringifyMapper(Mapper):
+    def map_text(self, node):
+        return node.text
+
+    def map_eol(self, node):
+        return "\n"
+
+    def map_container(self, node):
+        return "".join(self.rec(ch) for ch in node.content)
+
+    def map_group(self, node):
+        return "{%s}" % "".join(self.rec(ch) for ch in node.content)
+
+    def map_controlseq(self, node):
+        args = (
+            "".join("[%s]" % str(arg) for arg in node.optargs)
+            +
+            "".join("{%s}" % str(arg) for arg in node.args)
+            )
+
+        if not args:
+            args = " "
+
+        return r"\%s%s" % (
+                node.name,
+                args)
+
+    def map_environment(self, node):
+        args = (
+            "".join("[%s]" % str(arg) for arg in node.optargs)
+            +
+            "".join("{%s}" % str(arg) for arg in node.args)
+            )
+
+        return r"\begin{%s}%s%s\end{%s}" % (
+                node.name, args,
+                "".join(self.rec(ch) for ch in node.content),
+                node.name)
 
 
 class IdentityMapper(Mapper):
