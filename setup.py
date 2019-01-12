@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: latin1 -*-
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(name="pylatexparse",
       version="2019.1",
@@ -22,4 +22,4 @@ setup(name="pylatexparse",
       url="http://pypi.python.org/pypi/pylatexparse",
       author_email="inform@tiker.net",
       license="MIT",
-      packages=["pylatexparse"])
+      packages=find_packages())
