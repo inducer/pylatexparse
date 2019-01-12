@@ -503,6 +503,10 @@ def tokenize(
                 else:
                     break
 
+            if not (args or opt_args):
+                while s[i] in ' \t' and i < len(s):
+                    i += 1
+
             if name == "begin":
                 yield ControlSequence(
                         name, (Text(env_name),) + tuple(args), tuple(opt_args))
