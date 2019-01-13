@@ -22,7 +22,8 @@ THE SOFTWARE.
 
 import re
 
-CSEQ_RE = re.compile(r"\\(,|;|\\|\(|\)|\{|\}| |\[|\]|\"|[a-zA-Z*]+)")
+CSEQ_RE = re.compile(
+        r"\\(%|#|&|_|\n|,|;|\\|\(|\)|\{|\}| |\[|\]|\"|[a-zA-Z*]+)")
 ENVNAME_RE = re.compile(r"([a-zA-Z*]+)\s*}")
 
 
@@ -289,6 +290,7 @@ CSNAME_TO_ARG_COUNTS = {
         "end": (1, 0),
         "section": (1, 0),
         "subsection": (1, 0),
+        "subsubsection": (1, 0),
         "footnote": (1, 0),
         "label": (1, 0),
         "ref": (1, 0),
@@ -297,9 +299,15 @@ CSNAME_TO_ARG_COUNTS = {
         "arraystretch": (1, 0),
         "url": (1, 0),
         "cr": (1, 0),
+        "phantom": (1, 0),
+        "overset": (1, 0),
 
+        "newpage": (0, 0),
         "vspace": (1, 0),
         "vspace*": (1, 0),
+        "resizebox": (2, 0),
+        "raisebox": (2, 0),
+        "height": (2, 0),
         "smallskip": (0, 0),
         "smallskip": (0, 0),
         "medskip": (0, 0),
@@ -319,9 +327,13 @@ CSNAME_TO_ARG_COUNTS = {
         "sqrt": (1, 1),
 
         "bar": (0, 0),
+        "widehat": (0, 0),
+        "overline": (0, 0),
+        "widetilde": (0, 0),
         "hat": (0, 0),
         "tilde": (0, 0),
 
+        "oplus": (0, 0),
         "in": (0, 0),
         "sum": (0, 0),
         "int": (0, 0),
@@ -331,34 +343,48 @@ CSNAME_TO_ARG_COUNTS = {
         "[": (0, 0),
         "]": (0, 0),
 
+        "Alpha": (0, 0),
         "Delta": (0, 0),
         "Sigma": (0, 0),
         "Omega": (0, 0),
         "Phi": (0, 0),
+
+        "ell": (0, 0),
+        "triangle": (0, 0),
+        "partial": (0, 0),
 
         "alpha": (0, 0),
         "beta": (0, 0),
         "gamma": (0, 0),
         "delta": (0, 0),
         "epsilon": (0, 0),
+        "varepsilon": (0, 0),
         "phi": (0, 0),
+        "varphi": (0, 0),
         "psi": (0, 0),
         "pi": (0, 0),
         "mu": (0, 0),
         "nu": (0, 0),
+        "theta": (0, 0),
         "lambda": (0, 0),
         "rho": (0, 0),
         "sigma": (0, 0),
+        "tau": (0, 0),
         "kappa": (0, 0),
         "omega": (0, 0),
         "xi": (0, 0),
 
         "neq": (0, 0),
         "leq": (0, 0),
+        "leqslant": (0, 0),
+        "geqslant": (0, 0),
         "geq": (0, 0),
+        "gg": (0, 0),
         "ll": (0, 0),
+        "sim": (0, 0),
 
         "approx": (0, 0),
+        "perp": (0, 0),
         "equiv": (0, 0),
         "subset": (0, 0),
         "subseteq": (0, 0),
@@ -386,13 +412,21 @@ CSNAME_TO_ARG_COUNTS = {
 
         "hline": (0, 0),
 
+        "Huge": (0, 0),
+        "huge": (0, 0),
         "Large": (0, 0),
+        "large": (0, 0),
+        "scriptsize": (0, 0),
+        "footnotesize": (0, 0),
         "tiny": (0, 0),
 
+        "nobracket": (0, 0),
+        "nocomma": (0, 0),
         "langle": (0, 0),
         "rangle": (0, 0),
         "star": (0, 0),
         "dagger": (0, 0),
+        "ast": (0, 0),
         "cong": (0, 0),
         "pm": (0, 0),
 
@@ -419,10 +453,13 @@ CSNAME_TO_ARG_COUNTS = {
         "lfloor": (0, 0),
         "rfloor": (0, 0),
         "log": (0, 0),
+        "exp": (0, 0),
         "sin": (0, 0),
         "cos": (0, 0),
+        "tan": (0, 0),
         "arcsin": (0, 0),
         "arccos": (0, 0),
+        "arctan": (0, 0),
 
         "titlepage": (0, 0),
         "item": (0, 0),
@@ -431,16 +468,25 @@ CSNAME_TO_ARG_COUNTS = {
 
         "Leftrightarrow": (0, 0),
         "Rightarrow": (0, 0),
+        "rightarrow": (0, 0),
+        "leftarrow": (0, 0),
+        "leftrightarrow": (0, 0),
+        "downarrow": (0, 0),
         "to": (0, 0),
 
         "\\": (0, 1),
         ",": (0, 0),
+        ";": (0, 0),
         "\"": (0, 0),
         "{": (0, 0),
         "}": (0, 0),
         "(": (0, 0),
         ")": (0, 0),
         " ": (0, 0),
+        "_": (0, 0),
+        "&": (0, 0),
+        "#": (0, 0),
+        "%": (0, 0),
         }
 
 ENVNAME_TO_ARG_COUNTS = {
@@ -451,12 +497,15 @@ ENVNAME_TO_ARG_COUNTS = {
         "align": (0, 0),
         "align*": (0, 0),
         "alignat*": (0, 0),
+        "eqnarray*": (0, 0),
         "bmatrix": (0, 0),
         "cases": (0, 0),
         "center": (0, 0),
         "tabular": (1, 0),
         "array": (1, 0),
         "matrix": (1, 0),
+
+        "theorem": (1, 1),
         }
 
 # }}}
