@@ -16,6 +16,8 @@ not currently complete. Contributions to this for popular and common macros are
 welcome. For custom macros and environments, an interface exists for this data
 to be supplied.
 
+The package is Python 3-only.
+
 https://github.com/inducer/pylatexparse
 
 Copyright 2019 Andreas Kloeckner
