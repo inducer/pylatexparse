@@ -47,6 +47,7 @@ CSNAME_TO_ARG_COUNTS.update({
 class IndentingStringifyMapper(StringifyMapper):
     def __init__(self, indentation):
         self.indentation = indentation
+        self.eat_newline_if_next = False
 
     def map_eol(self, node):
         return "\n" + " "*self.indentation
@@ -59,8 +60,8 @@ class OrgPrinter(Mapper):
 
     # {{{ tools
 
-    def _indent(self):
-        return 2*min(len(self.enum_kinds)-1, 0)
+    def _indent(self, offset=0):
+        return 2*max(len(self.enum_kinds)+offset, 0)
 
     def _str(self, node):
         strmap = IndentingStringifyMapper(self._indent())
@@ -68,7 +69,7 @@ class OrgPrinter(Mapper):
 
     def print(self, s):
         self.eprint(s)
-        self.result.append("\n")
+        self.eprint(self._indent()*" ")
 
     def eprint(self, s):
         if isinstance(s, LatexDoc):
@@ -98,8 +99,8 @@ class OrgPrinter(Mapper):
     # }}}
 
     def map_eol(self, node):
-        self.result.append("\n")
-        self.print(self._indent()*" ")
+        self.eprint("\n")
+        self.eprint(self._indent()*" ")
 
     def map_container(self, node):
         for ch in node.content:
@@ -157,7 +158,7 @@ class OrgPrinter(Mapper):
 
         elif node.name in ["item", "sitem", "mitem"]:
             self.ensure_newline()
-            ind = self._indent()*" "
+            ind = self._indent(offset=-1)*" "
             if self.enum_kinds[-1] == "itemize":
                 self.eprint(f"{ind}- ")
             elif self.enum_kinds[-1] == "enumerate":
@@ -176,7 +177,6 @@ class OrgPrinter(Mapper):
                 # FIXME ?
                 "atsmcond"
                 ]:
-            self.ensure_newline()
             size_from_csname = {
                     "tlgcond": r"\lghide",
                     "algcond": r"\lghide",
@@ -188,6 +188,7 @@ class OrgPrinter(Mapper):
                     "atsmcond": r"\smhide",
                     }
 
+            self.ensure_newline()
             self.print(
                     "#+LATEX: "
                     rf"\begin{{hidden}}[{size_from_csname[node.name]}]")
