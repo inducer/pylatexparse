@@ -1,0 +1,301 @@
+#! /usr/bin/env python3
+
+import sys
+from pylatexparse import (
+        CSNAME_TO_ARG_COUNTS as CSNAME_TO_ARG_COUNTS_BASE,
+        parse_latex, Mapper, StringifyMapper,
+        LatexDoc, ControlSequence)
+
+CSNAME_TO_ARG_COUNTS = CSNAME_TO_ARG_COUNTS_BASE.copy()
+
+CSNAME_TO_ARG_COUNTS.update({
+        "tmtextbf": (1, 0),
+        "tmem": (1, 0),
+        "tmtt": (1, 0),
+        "tmtextit": (1, 0),
+        "tmmathbf": (1, 0),
+        "tmop": (1, 0),
+        "tmcolor": (2, 0),
+        "assign": (2, 0),
+        "textbar": (0, 0),
+        "norm": (1, 0),
+        "ip": (2, 0),
+        "abs": (1, 0),
+        "mathd": (0, 0),
+
+        "demo": (1, 0),
+        "inclass": (1, 0),
+        "tmunfolded": (2, 0),
+        "\n": (0, 0),
+        "stitle": (1, 0),
+
+        })
+
+
+UNWRAPPABLE_CSEQS = [
+                    "norm",
+                    "tmmathbf",
+                    "tmop",
+                    "tmtextbf",
+                    "tmem",
+                    "tmtt",
+                    "newpage",
+                    "stitle",
+                    "medskip",
+                    "demo",
+                    "inclass",
+                    ]
+
+
+class IndentingStringifyMapper(StringifyMapper):
+    def __init__(self, indentation):
+        self.indentation = indentation
+        self.eat_newline_if_next = False
+
+    def map_eol(self, node):
+        return "\n" + " "*self.indentation
+
+    def map_group(self, node):
+        if (len(node.content) == 1
+                and isinstance(node.content[0], ControlSequence)
+                and node.content[0].name in UNWRAPPABLE_CSEQS):
+            return self.rec(node.content[0])
+        else:
+            return super().map_group(node)
+
+
+class OrgPrinter(Mapper):
+    def __init__(self):
+        self.enum_kinds = []
+        self.result = []
+
+    # {{{ tools
+
+    def _indent(self, offset=0):
+        return 2*max(len(self.enum_kinds)+offset, 0)
+
+    def print(self, s):
+        self.eprint(s)
+        self.result.append("\n")
+        self.eprint(self._indent()*" ")
+
+    def eprint(self, s):
+        if isinstance(s, LatexDoc):
+            strmap = IndentingStringifyMapper(self._indent())
+            lines = strmap.rec(s).split("\n")
+            self.result.append(lines[0])
+            for l in lines[1:]:
+                self.result.append(l)
+        else:
+            self.result.append(s)
+
+    def ensure_newline(self):
+        i = len(self.result) - 1
+
+        while True:
+            if i < 0:
+                break
+
+            s_i = self.result[i]
+            s_i_strip = s_i.rstrip(" \t")
+            if not s_i_strip:
+                self.result.pop()
+                i = i-1
+            elif s_i == "\n":
+                self.result[i] = s_i_strip
+                return
+            else:
+                assert "\n" not in s_i
+                self.result.append("\n")
+                return
+
+    def nonredundant_newline(self):
+        count = 2
+        i = len(self.result) - 1
+
+        while True:
+            if i < 0:
+                break
+
+            s_i = self.result[i]
+            i -= 1
+            if s_i == "\n":
+                count -= 1
+                if not count:
+                    # two at most white-space separated newlines
+                    # don't add another
+                    return
+            elif s_i.strip():
+                # non-whitespace string before second newline
+                self.result.append("\n")
+                return
+            else:
+                # whitespace string -> no-op
+                pass
+
+    # }}}
+
+    def map_eol(self, node):
+        self.nonredundant_newline()
+        self.eprint(self._indent()*" ")
+
+    def map_container(self, node):
+        for ch in node.content:
+            self.rec(ch)
+
+    def map_text(self, node):
+        assert "\n" not in node.text
+        self.eprint(node.text)
+
+    def map_group(self, node):
+        if (len(node.content) == 1
+                and isinstance(node.content[0], ControlSequence)
+                and node.content[0].name in UNWRAPPABLE_CSEQS):
+            self.rec(node.content[0])
+
+        else:
+            self.eprint("{")
+            for ch in node.content:
+                self.rec(ch)
+            self.eprint("}")
+
+    def map_controlseq(self, node):
+        if node.name == "section":
+            self.ensure_newline()
+            self.print(f"* {node.args[0]}")
+        elif node.name == "subsection":
+            self.ensure_newline()
+            self.print(f"** {node.args[0]}")
+        elif node.name == "subsubsection":
+            self.ensure_newline()
+            self.print(f"*** {node.args[0]}")
+
+        elif node.name in ["\n", "newpage"]:
+            pass
+
+        elif node.name in ["textbf", "tmtextbf"]:
+            self.eprint("*")
+            for ch in node.args:
+                self.rec(ch)
+            self.eprint("*")
+
+        elif node.name in ["emph", "textit", "tmem"]:
+            self.eprint("/")
+            for ch in node.args:
+                self.rec(ch)
+            self.eprint("/")
+
+        elif node.name in ["tmtextit"]:
+            self.eprint("\\emph{")
+            for ch in node.args:
+                self.rec(ch)
+            self.eprint("}")
+
+        elif node.name in ["texttt", "tmtt"]:
+            self.eprint("=")
+            for ch in node.args:
+                self.rec(ch)
+            self.eprint("=")
+
+        elif node.name == "tmcolor":
+            self.eprint(r"{\color{%s}" % node.args[0].text)
+            self.rec(node.args[1])
+            self.eprint(r"}")
+
+        elif node.name == "item":
+            self.ensure_newline()
+            ind = self._indent(offset=-1)*" "
+            if self.enum_kinds[-1] == "itemize":
+                self.eprint(f"{ind}- ")
+            elif self.enum_kinds[-1] == "enumerate":
+                self.eprint(f"{ind}1. ")
+            else:
+                raise ValueError("unexpected enum_kind")
+
+        elif node.name == "tmunfolded":
+            self.rec(node.args[0])
+            self.ensure_newline()
+            self.print(
+                    r"#+LATEX: \begin{hidden}")
+            self.rec(node.args[1])
+            self.ensure_newline()
+            self.print(r"#+LATEX: \end{hidden}")
+
+        elif node.name in [
+                "\"", "&", "#", "%",
+                "vspace", "vspace*",
+                "resizebox",
+                "includegraphics",
+                " ", "\\",
+                "smallskip", "medskip", "bigskip",
+                "quad",
+                "footnotesize",
+                "eqref",
+                "footnote",
+                "huge",
+                "demo", "inclass",
+                ]:
+            self.eprint(node)
+
+        elif node.name == "stitle":
+            self.ensure_newline()
+            if node.args:
+                self.print(f"**** {node.args[0]}")
+            else:
+                self.print(f"**** (no title)")
+
+        else:
+            raise NotImplementedError(
+                    rf"do not know how to handle '\{node.name}'")
+
+    def map_environment(self, node):
+        if node.name == "itemize":
+            self.enum_kinds.append("itemize")
+            for ch in node.content:
+                self.rec(ch)
+            self.enum_kinds.pop()
+
+        elif node.name == "enumerate":
+            self.enum_kinds.append("enumerate")
+            for ch in node.content:
+                self.rec(ch)
+            self.enum_kinds.pop()
+
+        elif node.name == "center":
+            self.ensure_newline()
+            self.print("#+BEGIN_CENTER")
+            for ch in node.content:
+                self.rec(ch)
+            self.ensure_newline()
+            self.print("#+END_CENTER")
+
+        elif node.name in [
+                "$", "(", "$$", "[",
+                "align", "align*", "alignat*",
+                "eqnarray*",
+                "theorem",
+                "tabular",
+                ]:
+            self.eprint(node)
+
+        else:
+            raise NotImplementedError(
+                    rf"do not know how to handle '{node.name}' env")
+
+
+def main():
+    for fname in sys.argv[1:]:
+        with open(fname, "r") as inf:
+            doc = parse_latex(
+                inf.read(),
+                csname_to_arg_counts=CSNAME_TO_ARG_COUNTS)
+
+            org_printer = OrgPrinter()
+            try:
+                org_printer.rec(doc)
+            finally:
+                print("".join(org_printer.result))
+
+
+if __name__ == "__main__":
+    main()
