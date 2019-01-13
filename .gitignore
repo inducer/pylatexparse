@@ -1,2 +1,5 @@
 *~
 .*.sw[op]
+
+__pycache__
+*.egg-info
