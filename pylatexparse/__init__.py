@@ -47,6 +47,23 @@ class EndOfLine(LatexDoc):
     mapper_method = "map_eol"
 
 
+class _MathDelimiter(LatexDoc):
+    """Internal, not encountered in user doc trees."""
+    pass
+
+
+class _InlineMathDelimiter(_MathDelimiter):
+    """Internal, not encountered in user doc trees."""
+
+    mapper_method = "map_inline_math_delimiter"
+
+
+class _DisplayMathDelimiter(_MathDelimiter):
+    """Internal, not encountered in user doc trees."""
+
+    mapper_method = "map_display_math_delimiter"
+
+
 class LatexDocContainer(LatexDoc):
     def __init__(self, content):
         self.content = content
@@ -96,6 +113,12 @@ class StringifyMapper(Mapper):
     def map_eol(self, node):
         return "\n"
 
+    def map_inline_math_delimiter(self, node):
+        return "$"
+
+    def map_display_math_delimiter(self, node):
+        return "$$"
+
     def map_container(self, node):
         return "".join(self.rec(ch) for ch in node.content)
 
@@ -117,6 +140,19 @@ class StringifyMapper(Mapper):
                 args)
 
     def map_environment(self, node):
+        if node.name == "$":
+            return r"$%s$" % (
+                    "".join(self.rec(ch) for ch in node.content))
+        if node.name == "$$":
+            return r"$$%s$$" % (
+                    "".join(self.rec(ch) for ch in node.content))
+        elif node.name == "(":
+            return r"\(%s\)" % (
+                    "".join(self.rec(ch) for ch in node.content))
+        elif node.name == "[":
+            return r"\[%s\]" % (
+                    "".join(self.rec(ch) for ch in node.content))
+
         args = (
             "".join("[%s]" % str(arg) for arg in node.optargs)
             +
@@ -142,6 +178,8 @@ class IdentityMapper(Mapper):
     def map_eol(self, node):
         return node
 
+    map_inline_math_delimiter = map_eol
+    map_display_math_delimiter = map_eol
     map_text = map_eol
 
     def map_controlseq(self, node):
@@ -159,6 +197,15 @@ class IdentityMapper(Mapper):
                 )
 
 
+def math_delim_to_env_name(n):
+    if isinstance(n, _InlineMathDelimiter):
+        return "$"
+    elif isinstance(n, _DisplayMathDelimiter):
+        return "$$"
+    else:
+        raise ValueError("unrecognized math delimiter")
+
+
 class EnvironmentGatherer(IdentityMapper):
     def map_iterable(self, iterable, i=0, end_i_box=None, env_name=None):
         result = []
@@ -168,9 +215,10 @@ class EnvironmentGatherer(IdentityMapper):
 
             if isinstance(n, ControlSequence) and n.name == "end":
                 assert env_name == n.args[0].text
-                if end_i_box is not None:
-                    end_i_box[0] = i+1
+                assert end_i_box is not None
+                end_i_box[0] = i+1
                 return result
+
             elif isinstance(n, ControlSequence) and n.name == "begin":
                 i_box = [None]
                 result.append(Environment(
@@ -182,6 +230,42 @@ class EnvironmentGatherer(IdentityMapper):
                         env_name=n.args[0].text)))
                 i = i_box[0]
                 assert i is not None
+
+            elif isinstance(n, ControlSequence) and n.name in ["[", "("]:
+                i_box = [None]
+                result.append(Environment(
+                    n.name, (), (),
+                    self.map_iterable(
+                        nodes, i=i+1, end_i_box=i_box,
+                        env_name=n.name)))
+                i = i_box[0]
+                assert i is not None
+
+            elif isinstance(n, ControlSequence) and n.name in ["]", ")"]:
+                assert env_name in "[("
+                assert end_i_box is not None
+                end_i_box[0] = i+1
+                return result
+
+            elif isinstance(n, _MathDelimiter):
+                math_env_name = math_delim_to_env_name(n)
+
+                if env_name == math_env_name:
+                    # end math
+                    assert end_i_box is not None
+                    end_i_box[0] = i+1
+                    return result
+                else:
+                    # begin math
+                    i_box = [None]
+                    result.append(Environment(
+                        math_env_name, (), (),
+                        self.map_iterable(
+                            nodes, i=i+1, end_i_box=i_box,
+                            env_name=math_env_name)))
+                    i = i_box[0]
+                    assert i is not None
+
             else:
                 result.append(n)
                 i += 1
@@ -439,6 +523,14 @@ def tokenize(
             if end_i_box is not None:
                 end_i_box[0] = i+1
             return
+
+        elif c == "$":
+            i += 1
+            if i < len(s) and s[i] == "$":
+                yield _DisplayMathDelimiter()
+                i += 1
+            else:
+                yield _InlineMathDelimiter()
 
         elif c == "\\":
             if "".join(cur_str):
