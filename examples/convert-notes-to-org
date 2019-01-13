@@ -69,6 +69,7 @@ class OrgPrinter(Mapper):
 
     def print(self, s):
         self.eprint(s)
+        self.result.append("\n")
         self.eprint(self._indent()*" ")
 
     def eprint(self, s):
@@ -89,17 +90,42 @@ class OrgPrinter(Mapper):
             if not s_i_strip:
                 self.result.pop()
                 i = i-1
-            elif s_i_strip.endswith("\n"):
+            elif s_i == "\n":
                 self.result[i] = s_i_strip
                 return
             else:
+                assert "\n" not in s_i
                 self.result.append("\n")
                 return
+
+    def nonredundant_newline(self):
+        count = 2
+        i = len(self.result) - 1
+
+        while True:
+            if i < 0:
+                break
+
+            s_i = self.result[i]
+            i -= 1
+            if s_i == "\n":
+                count -= 1
+                if not count:
+                    # two at most white-space separated newlines
+                    # don't add another
+                    return
+            elif s_i.strip():
+                # non-whitespace string before second newline
+                self.result.append("\n")
+                return
+            else:
+                # whitespace string -> no-op
+                pass
 
     # }}}
 
     def map_eol(self, node):
-        self.eprint("\n")
+        self.nonredundant_newline()
         self.eprint(self._indent()*" ")
 
     def map_container(self, node):
@@ -140,7 +166,6 @@ class OrgPrinter(Mapper):
             self.ensure_newline()
             self.print(f"** {node.args[0]}")
         elif node.name == "subsection":
-            # FIXME!
             self.ensure_newline()
             self.print(f"*** {node.args[0]}")
 
@@ -221,9 +246,9 @@ class OrgPrinter(Mapper):
 
             self.ensure_newline()
             if node.args:
-                self.print(f"*** {node.args[0]}")
+                self.print(f"**** {node.args[0]}")
             else:
-                self.print(f"*** (no title)")
+                self.print(f"**** (no title)")
             for ch in node.content:
                 self.rec(ch)
 
