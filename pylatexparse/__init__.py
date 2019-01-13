@@ -525,6 +525,10 @@ def tokenize(
             return
 
         elif c == "$":
+            if "".join(cur_str):
+                yield Text("".join(cur_str))
+            del cur_str[:]
+
             i += 1
             if i < len(s) and s[i] == "$":
                 yield _DisplayMathDelimiter()
