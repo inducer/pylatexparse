@@ -3,7 +3,8 @@
 import sys
 from pylatexparse import (
         CSNAME_TO_ARG_COUNTS as CSNAME_TO_ARG_COUNTS_BASE,
-        parse_latex, Mapper, ControlSequence)
+        parse_latex, Mapper, StringifyMapper,
+        LatexDoc, ControlSequence)
 
 CSNAME_TO_ARG_COUNTS = CSNAME_TO_ARG_COUNTS_BASE.copy()
 
@@ -43,25 +44,41 @@ CSNAME_TO_ARG_COUNTS.update({
         })
 
 
+class IndentingStringifyMapper(StringifyMapper):
+    def __init__(self, indentation):
+        self.indentation = indentation
+
+    def map_eol(self, node):
+        return "\n" + " "*self.indentation
+
+
 class OrgPrinter(Mapper):
     def __init__(self):
-        self.itemize_level = -1
+        self.enum_kinds = []
         self.result = []
 
+    def _str(self, node):
+        ilevel = 2*len(self.enum_kinds)
+
+        strmap = IndentingStringifyMapper(ilevel)
+        return strmap.rec(node)
+
     def print(self, s):
-        self.result.append(s)
+        self.eprint(s)
         self.result.append("\n")
 
     def eprint(self, s):
-        self.result.append(str(s))
+        if isinstance(s, LatexDoc):
+            self.result.append(self._str(s))
+        else:
+            self.result.append(s)
 
     def ensure_newline(self):
         if self.result[-1][-1] != "\n":
             self.result.append("\n")
 
     def map_eol(self, node):
-        if self.itemize_level > 0:
-            self.print("  "*self.itemize_level)
+        self.print("  "*len(self.enum_kinds))
         self.result.append("\n")
 
     def map_container(self, node):
@@ -93,8 +110,11 @@ class OrgPrinter(Mapper):
             self.eprint(str(node))
 
     def map_controlseq(self, node):
-        if node.name in ["subtitle", "date"]:
-            self.eprint(node,)
+        if node.name in ["date"]:
+            pass
+        elif node.name == "subtitle":
+            self.ensure_newline()
+            self.print(f"* {node.args[0]}")
         elif node.name == "section":
             self.ensure_newline()
             self.print(f"** {node.args[0]}")
@@ -102,14 +122,50 @@ class OrgPrinter(Mapper):
             # FIXME!
             self.ensure_newline()
             self.print(f"*** {node.args[0]}")
+
+        elif node.name == "textbf":
+            self.eprint("*")
+            for ch in node.args:
+                self.rec(ch)
+            self.eprint("*")
+
+        elif node.name in ["emph", "textit"]:
+            self.eprint("/")
+            for ch in node.args:
+                self.rec(ch)
+            self.eprint("/")
+
         elif node.name in ["item", "sitem", "mitem"]:
             self.ensure_newline()
-            self.eprint(f"{' '*2*self.itemize_level}- ")
-        elif node.name in ["algcond", "lgcond"]:
+            ind = 2*len(self.enum_kinds)
+            if self.enum_kinds[-1] == "itemize":
+                self.eprint(f"{ind}- ")
+            elif self.enum_kinds[-1] == "enumerate":
+                self.eprint(f"{ind}1. ")
+            else:
+                raise ValueError("unexpected enum_kind")
+
+        elif node.name in [
+                "tlgcond", "algcond", "lgcond",
+                "mdcond",
+                # FIXME ?
+                "tmdcond",
+                "smcond",
+                # FIXME ?
+                "asmcond",
+                # FIXME ?
+                "atsmcond"
+                ]:
             self.ensure_newline()
             size_from_csname = {
+                    "tlgcond": r"\lghide",
                     "algcond": r"\lghide",
                     "lgcond": r"\lghide",
+                    "mdcond": r"\mdhide",
+                    "tmdcond": r"\mdhide",
+                    "smcond": r"\smhide",
+                    "asmcond": r"\smhide",
+                    "atsmcond": r"\smhide",
                     }
 
             self.print(
@@ -120,8 +176,19 @@ class OrgPrinter(Mapper):
             self.ensure_newline()
             self.print(r"#+LATEX: \end{hidden}")
 
-        elif node.name in ["\"", "coloremph", "fillnum"]:
-            self.eprint(str(node))
+        elif node.name in [
+                "\"", "coloremph", "fillnum",
+                "vspace", "vspace*",
+                " ", "\\",
+                "smallskip", "medskip", "bigskip", "filufil",
+                "eqref",
+                "footnote",
+                ]:
+            self.eprint(node)
+
+        elif "cornerlink" in node.name:
+            self.eprint(node)
+
         else:
             raise NotImplementedError(
                     rf"do not know how to handle '\{node.name}'")
@@ -140,10 +207,22 @@ class OrgPrinter(Mapper):
                 self.rec(ch)
 
         elif node.name == "itemize":
-            self.itemize_level += 1
+            self.enum_kinds.append("itemize")
             for ch in node.content:
                 self.rec(ch)
-            self.itemize_level -= 1
+            self.enum_kinds.pop()
+
+        elif node.name == "enumerate":
+            self.enum_kinds.append("enumerate")
+            for ch in node.content:
+                self.rec(ch)
+            self.enum_kinds.pop()
+
+        elif node.name in [
+                "$", "(", "$$", "[",
+                "align", "align*", "alignat*",
+                ]:
+            self.eprint(node)
 
         else:
             raise NotImplementedError(
@@ -153,9 +232,6 @@ class OrgPrinter(Mapper):
 def main():
     for fname in sys.argv[1:]:
         with open(fname, "r") as inf:
-            print("# " + (73*"-"))
-            print(f"# {fname}")
-            print("# " + (73*"-"))
             doc = parse_latex(
                 inf.read(),
                 csname_to_arg_counts=CSNAME_TO_ARG_COUNTS)
