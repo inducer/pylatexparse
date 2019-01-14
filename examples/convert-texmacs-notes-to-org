@@ -17,7 +17,7 @@ CSNAME_TO_ARG_COUNTS.update({
         "tmmathbf": (1, 0),
         "tmop": (1, 0),
         "tmcolor": (2, 0),
-        "assign": (2, 0),
+        "assign": (0, 0),
         "textbar": (0, 0),
         "norm": (1, 0),
         "ip": (2, 0),
