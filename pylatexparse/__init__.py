@@ -24,7 +24,7 @@ import re
 
 CSEQ_RE = re.compile(
         r"\\(%|#|&|_|\n|,|;|\\|\(|\)|\{|\}| |\[|\]|\"|[a-zA-Z*]+)")
-ENVNAME_RE = re.compile(r"([a-zA-Z*]+)\s*}")
+ENVNAME_RE = re.compile(r"^([a-zA-Z*]+)\s*$")
 
 
 # {{{ node types
@@ -34,12 +34,16 @@ class LatexDoc:
         return StringifyMapper().rec(self)
 
 
-class Text(LatexDoc):
+class WhiteSpace(LatexDoc):
     def __init__(self, text):
         self.text = text
 
-    def __str__(self):
-        return self.text
+    mapper_method = "map_whitespace"
+
+
+class Text(LatexDoc):
+    def __init__(self, text):
+        self.text = text
 
     mapper_method = "map_text"
 
@@ -74,6 +78,20 @@ class LatexDocContainer(LatexDoc):
 
 class Group(LatexDocContainer):
     mapper_method = "map_group"
+
+
+class Superscript(LatexDoc):
+    def __init__(self, arg):
+        self.arg = arg
+
+    mapper_method = "map_superscript"
+
+
+class Subscript(LatexDoc):
+    def __init__(self, arg):
+        self.arg = arg
+
+    mapper_method = "map_subscript"
 
 
 class ControlSequence(LatexDoc):
@@ -111,6 +129,8 @@ class StringifyMapper(Mapper):
     def map_text(self, node):
         return node.text
 
+    map_whitespace = map_text
+
     def map_eol(self, node):
         return "\n"
 
@@ -126,14 +146,40 @@ class StringifyMapper(Mapper):
     def map_group(self, node):
         return "{%s}" % "".join(self.rec(ch) for ch in node.content)
 
+    def map_superscript(self, node):
+        ch = {
+                Superscript: "^",
+                Subscript: "_",
+                }[type(node)]
+
+        if node.arg is None:
+            # These only occur internally before argument gathering.
+            return ch
+
+        if (
+                (isinstance(node.arg, ControlSequence)
+                    and not node.arg.args
+                    and not node.arg.optargs)
+                or (isinstance(node.arg, Text)
+                    and len(node.arg.text) == 1)):
+            return "%s%s" % (ch, self.rec(node.arg))
+        else:
+            return "%s{%s}" % (ch, self.rec(node.arg))
+
+    map_subscript = map_superscript
+
     def map_controlseq(self, node):
+        if node.args is None:
+            # These only occur internally before argument gathering.
+            return "\\" + node.name
+
         args = (
-            "".join("[%s]" % str(arg) for arg in node.optargs)
+            "".join("[%s]" % self.rec(arg) for arg in node.optargs)
             +
-            "".join("{%s}" % str(arg) for arg in node.args)
+            "".join("{%s}" % self.rec(arg) for arg in node.args)
             )
 
-        if not args:
+        if not args and node.name[-1].isalpha():
             args = " "
 
         return r"\%s%s" % (
@@ -142,7 +188,7 @@ class StringifyMapper(Mapper):
 
     def map_environment(self, node):
         if node.name == "$":
-            return r"$%s$" % (
+            return r"$%s$ " % (
                     "".join(self.rec(ch) for ch in node.content))
         if node.name == "$$":
             return r"$$%s$$" % (
@@ -155,9 +201,9 @@ class StringifyMapper(Mapper):
                     "".join(self.rec(ch) for ch in node.content))
 
         args = (
-            "".join("[%s]" % str(arg) for arg in node.optargs)
+            "".join("[%s]" % self.rec(arg) for arg in node.optargs)
             +
-            "".join("{%s}" % str(arg) for arg in node.args)
+            "".join("{%s}" % self.rec(arg) for arg in node.args)
             )
 
         return r"\begin{%s}%s%s\end{%s}" % (
@@ -182,8 +228,22 @@ class IdentityMapper(Mapper):
     map_inline_math_delimiter = map_eol
     map_display_math_delimiter = map_eol
     map_text = map_eol
+    map_whitespace = map_eol
+
+    def map_superscript(self, node):
+        if node.arg is None:
+            # These only occur internally before argument gathering.
+            return node
+
+        return type(node)(self.rec(node.arg))
+
+    map_subscript = map_superscript
 
     def map_controlseq(self, node):
+        if node.args is None:
+            # These only occur internally before argument gathering.
+            return node
+
         return type(node)(
                 node.name,
                 self.map_iterable(self.rec(ch) for ch in node.args),
@@ -197,84 +257,118 @@ class IdentityMapper(Mapper):
                 self.map_iterable(self.rec(ch) for ch in node.content),
                 )
 
+# }}}
 
-def math_delim_to_env_name(n):
-    if isinstance(n, _InlineMathDelimiter):
-        return "$"
-    elif isinstance(n, _DisplayMathDelimiter):
-        return "$$"
+
+# {{{ tokenizer
+
+WHITESPACE = " \t"
+
+
+def make_text(s):
+    stripped = s.strip(WHITESPACE)
+    if stripped == s:
+        return Text(s)
+    elif not stripped:
+        return WhiteSpace(s)
     else:
-        raise ValueError("unrecognized math delimiter")
+        assert False, "received text with leading or trailing whitespace"
 
 
-class EnvironmentGatherer(IdentityMapper):
-    def map_iterable(self, iterable, i=0, end_i_box=None, env_name=None):
-        result = []
-        nodes = list(iterable)
-        while i < len(nodes):
-            n = nodes[i]
+def tokenize(s, i=0, end_i_box=None):
 
-            if isinstance(n, ControlSequence) and n.name == "end":
-                assert env_name == n.args[0].text
-                assert end_i_box is not None
-                end_i_box[0] = i+1
-                return result
+    yielded_node = None
 
-            elif isinstance(n, ControlSequence) and n.name == "begin":
-                i_box = [None]
-                result.append(Environment(
-                    n.args[0].text,
-                    n.args[1:],
-                    n.optargs,
-                    self.map_iterable(
-                        nodes, i=i+1, end_i_box=i_box,
-                        env_name=n.args[0].text)))
-                i = i_box[0]
-                assert i is not None
+    cur_str = ""
+    while i < len(s):
+        c = s[i]
 
-            elif isinstance(n, ControlSequence) and n.name in ["[", "("]:
-                i_box = [None]
-                result.append(Environment(
-                    n.name, (), (),
-                    self.map_iterable(
-                        nodes, i=i+1, end_i_box=i_box,
-                        env_name=n.name)))
-                i = i_box[0]
-                assert i is not None
+        # {{{ case distinction
 
-            elif isinstance(n, ControlSequence) and n.name in ["]", ")"]:
-                assert env_name in "[("
-                assert end_i_box is not None
-                end_i_box[0] = i+1
-                return result
-
-            elif isinstance(n, _MathDelimiter):
-                math_env_name = math_delim_to_env_name(n)
-
-                if env_name == math_env_name:
-                    # end math
-                    assert end_i_box is not None
-                    end_i_box[0] = i+1
-                    return result
-                else:
-                    # begin math
-                    i_box = [None]
-                    result.append(Environment(
-                        math_env_name, (), (),
-                        self.map_iterable(
-                            nodes, i=i+1, end_i_box=i_box,
-                            env_name=math_env_name)))
-                    i = i_box[0]
-                    assert i is not None
-
-            else:
-                result.append(n)
+        if c == "%":
+            while s[i] != "\n" and i < len(s):
+                i += 1
+            if i < len(s):
+                # skip the newline
                 i += 1
 
-        if env_name is not None:
-            raise ValueError("missing end of environment '%s'" % env_name)
+        elif c == "\n":
+            yielded_node = EndOfLine()
+            i += 1
 
-        return result
+        elif c == "{":
+            i_box = [None]
+            i += 1
+            yielded_node = Group(tuple(tokenize(s, i, end_i_box=i_box)))
+            i = i_box[0]
+
+        elif c == "}":
+            if end_i_box is not None:
+                end_i_box[0] = i+1
+            if "".join(cur_str):
+                yield Text("".join(cur_str))
+            return
+
+        elif c in "[]":
+            # These must occur in Text nodes by themselves,
+            # to facilitate recognizing optional arg lists.
+            yielded_node = Text(c)
+            i += 1
+
+        elif c == "$":
+            i += 1
+            if i < len(s) and s[i] == "$":
+                yielded_node = _DisplayMathDelimiter()
+                i += 1
+            else:
+                yielded_node = _InlineMathDelimiter()
+
+        elif c == "\\":
+            cseq_match = CSEQ_RE.match(s, i)
+            assert cseq_match
+            name = cseq_match.group(1)
+            i += len(name) + 1
+
+            yielded_node = ControlSequence(name, None, None)
+
+        elif c in "^_":
+            i += 1
+            yielded_node = {
+                "^": Superscript,
+                "_": Subscript,
+                }[c](None)
+
+        else:
+            if cur_str:
+                c_is_space = c in WHITESPACE
+                cur_str_is_space = cur_str.strip(WHITESPACE) == ""
+
+                if c_is_space != cur_str_is_space:
+                    if cur_str_is_space:
+                        yield WhiteSpace(cur_str)
+                    else:
+                        yield Text(cur_str)
+
+                    cur_str = c
+                else:
+                    cur_str += c
+            else:
+                cur_str += c
+
+            i += 1
+
+        # }}}
+
+        if yielded_node is not None:
+            if "".join(cur_str):
+                yield make_text(cur_str)
+            cur_str = ""
+
+            yield yielded_node
+            yielded_node = None
+
+    if "".join(cur_str):
+        yield Text("".join(cur_str))
 
 # }}}
 
@@ -513,11 +607,7 @@ ENVNAME_TO_ARG_COUNTS = {
 # }}}
 
 
-def skip_whitespace(s, i):
-    while s[i] in ' \n\t' and i < len(s):
-        i += 1
-    return i
-
+# {{{ argument gatherer
 
 def make_container(iterable):
     nodes = tuple(iterable)
@@ -528,144 +618,234 @@ def make_container(iterable):
         return LatexDocContainer(tuple(nodes))
 
 
-# {{{ tokenizer
+def skip_whitespace(nodes, i):
+    while i < len(nodes) and isinstance(nodes[i], WhiteSpace):
+        i += 1
+    return i
 
-def tokenize(
-        s, i, csname_to_arg_counts, envname_to_arg_counts,
-        in_optional_arg=False, end_i_box=None):
 
-    cur_str = []
-    while i < len(s):
-        c = s[i]
+def skip_whitespace_and_eol(nodes, i):
+    while i < len(nodes) and isinstance(nodes[i], (WhiteSpace, EndOfLine)):
+        i += 1
+    return i
 
-        if c == "%":
-            while s[i] != "\n" and i < len(s):
-                i += 1
-            if i < len(s):
-                # skip the newline
-                i += 1
 
-        elif c == "\n":
-            if "".join(cur_str):
-                yield Text("".join(cur_str))
-            del cur_str[:]
+def chomp_character(nodes, i):
+    t = nodes[i]
+    assert isinstance(t, Text)
 
-            yield EndOfLine()
-            i += 1
+    assert t.text
+    result = t.text[0]
+    remainder = t.text[1:]
+    if remainder:
+        nodes[i] = Text(remainder)
+    else:
+        del nodes[i]
 
-        elif c == "{":
-            if "".join(cur_str):
-                yield Text("".join(cur_str))
-            del cur_str[:]
+    return result
 
-            i_box = [None]
-            i += 1
-            yield Group(list(tokenize(
-                s, i, end_i_box=i_box,
-                csname_to_arg_counts=csname_to_arg_counts,
-                envname_to_arg_counts=envname_to_arg_counts)))
-            i = i_box[0]
 
-        elif c == "}" or (c == "]" and in_optional_arg):
-            if "".join(cur_str):
-                yield Text("".join(cur_str))
-            del cur_str[:]
+class ArgumentGatherer(IdentityMapper):
+    def __init__(self, csname_to_arg_counts, envname_to_arg_counts):
+        self.csname_to_arg_counts = csname_to_arg_counts
+        self.envname_to_arg_counts = envname_to_arg_counts
 
-            if end_i_box is not None:
-                end_i_box[0] = i+1
-            return
+    def map_iterable(self, iterable, i=0, end_i_box=None):
+        result = []
+        nodes = list(iterable)
 
-        elif c == "$":
-            if "".join(cur_str):
-                yield Text("".join(cur_str))
-            del cur_str[:]
+        while i < len(nodes):
+            n = nodes[i]
 
-            i += 1
-            if i < len(s) and s[i] == "$":
-                yield _DisplayMathDelimiter()
-                i += 1
-            else:
-                yield _InlineMathDelimiter()
-
-        elif c == "\\":
-            if "".join(cur_str):
-                yield Text("".join(cur_str))
-            del cur_str[:]
-
-            cseq_match = CSEQ_RE.match(s, i)
-            assert cseq_match
-            name = cseq_match.group(1)
-            i += len(name) + 1
-
-            args = []
-            if name == "begin":
-                i = skip_whitespace(s, i)
-                assert s[i] == "{"
+            if isinstance(n, (ControlSequence, Subscript, Superscript)):
                 i += 1
 
-                envname_match = ENVNAME_RE.match(s, i)
-                assert envname_match
-                env_name = envname_match.group(1)
-                i += len(envname_match.group(0))
+                # {{{ determine arg count
 
-                try:
-                    nargs, nopt_args = ENVNAME_TO_ARG_COUNTS[env_name]
-                except KeyError:
-                    raise NotImplementedError(
-                        f"no arg count known for environment '{env_name}'")
+                if isinstance(n, (Subscript, Superscript)):
+                    nargs = 1
+                    nopt_args = 0
 
-            else:
-                try:
-                    nargs, nopt_args = csname_to_arg_counts[name]
-                except KeyError:
-                    raise NotImplementedError(
-                        f"no arg count known for control sequence \\{name}")
-            opt_args = []
-            while nopt_args:
-                i = skip_whitespace(s, i)
-                if s[i] == "[":
-                    i_box = [None]
-                    opt_args.append(
-                            make_container(tokenize(
-                                s, i+1, end_i_box=i_box,
-                                in_optional_arg=True,
-                                csname_to_arg_counts=csname_to_arg_counts,
-                                envname_to_arg_counts=envname_to_arg_counts)))
-                    i = i_box[0]
-                    nopt_args -= 1
-                else:
-                    break
+                elif n.name == "begin":
+                    i = skip_whitespace_and_eol(nodes, i)
+                    assert isinstance(nodes[i], Group)
+                    assert len(nodes[i].content) == 1
+                    assert isinstance(nodes[i].content[0], Text)
 
-            while nargs:
-                i = skip_whitespace(s, i)
-                if s[i] == "{":
-                    i_box = [None]
-                    args.append(make_container(
-                        tokenize(
-                            s, i+1, end_i_box=i_box,
-                            csname_to_arg_counts=csname_to_arg_counts,
-                            envname_to_arg_counts=envname_to_arg_counts)))
-                    i = i_box[0]
-                    nargs -= 1
-                else:
-                    break
+                    env_name = nodes[i].content[0].text
+                    assert ENVNAME_RE.match(env_name)
 
-            if not (args or opt_args):
-                while s[i] in ' \t' and i < len(s):
                     i += 1
 
-            if name == "begin":
-                yield ControlSequence(
-                        name, (Text(env_name),) + tuple(args), tuple(opt_args))
+                    try:
+                        nargs, nopt_args = self.envname_to_arg_counts[env_name]
+                    except KeyError:
+                        raise NotImplementedError(
+                            f"no arg count known for environment '{env_name}'")
+
+                else:
+                    try:
+                        nargs, nopt_args = self.csname_to_arg_counts[n.name]
+                    except KeyError:
+                        raise NotImplementedError(
+                            "no arg count known for control sequence "
+                            f"\\{n.name}")
+
+                # }}}
+
+                # {{{ optional arguments
+
+                opt_args = []
+                while len(opt_args) < nopt_args:
+                    i = skip_whitespace_and_eol(nodes, i)
+
+                    # tokenizer ensures [] are singled out
+                    if (isinstance(nodes[i], Text) and nodes[i].text == "["):
+                        i += 1
+                        arg = []
+                        while (
+                                i < len(nodes)
+                                and not (
+
+                                    isinstance(nodes[i], Text)
+                                    and nodes[i].text == "]")):
+                            arg.append(nodes[i])
+                            i += 1
+
+                        # skip final ']'
+                        i += 1
+
+                        opt_args.append(LatexDocContainer(tuple(arg)))
+
+                    else:
+                        break
+
+                # }}}
+
+                # {{{ mandatory arguments
+
+                args = []
+                while len(args) < nargs:
+                    i = skip_whitespace_and_eol(nodes, i)
+
+                    if isinstance(nodes[i], Text):
+                        args.append(Text(chomp_character(nodes, i)))
+                        # i remains where it is
+                    elif isinstance(nodes[i], ControlSequence):
+                        args.append(
+                                ControlSequence(nodes[i].name, (), ()))
+                        i += 1
+                    elif isinstance(nodes[i], Group):
+                        args.append(
+                                make_container(nodes[i].content))
+                        i += 1
+                    else:
+                        raise RuntimeError("unexpected argument type")
+
+                # }}}
+
+                if not (args or opt_args):
+                    i = skip_whitespace(nodes, i)
+
+                if isinstance(n, (Subscript, Superscript)):
+                    assert len(args) == 1
+                    result.append(type(n)(args[0]))
+                elif n.name == "begin":
+                    result.append(ControlSequence(
+                            n.name,
+                            (Text(env_name),) + tuple(args),
+                            tuple(opt_args)))
+                else:
+                    result.append(ControlSequence(
+                            n.name, tuple(args), tuple(opt_args)))
             else:
-                yield ControlSequence(name, tuple(args), tuple(opt_args))
+                result.append(n)
+                i += 1
 
-        else:
-            cur_str.append(c)
-            i += 1
+        return tuple(result)
 
-    if "".join(cur_str):
-        yield Text("".join(cur_str))
+# }}}
+
+
+# {{{ environment gatherer
+
+def math_delim_to_env_name(n):
+    if isinstance(n, _InlineMathDelimiter):
+        return "$"
+    elif isinstance(n, _DisplayMathDelimiter):
+        return "$$"
+    else:
+        raise ValueError("unrecognized math delimiter")
+
+
+class EnvironmentGatherer(IdentityMapper):
+    def map_iterable(self, iterable, i=0, end_i_box=None, env_name=None):
+        result = []
+        nodes = list(iterable)
+        while i < len(nodes):
+            n = nodes[i]
+
+            if isinstance(n, ControlSequence) and n.name == "end":
+                assert env_name == n.args[0].text
+                assert end_i_box is not None
+                end_i_box[0] = i+1
+                return result
+
+            elif isinstance(n, ControlSequence) and n.name == "begin":
+                i_box = [None]
+                result.append(Environment(
+                    n.args[0].text,
+                    n.args[1:],
+                    n.optargs,
+                    self.map_iterable(
+                        nodes, i=i+1, end_i_box=i_box,
+                        env_name=n.args[0].text)))
+                i = i_box[0]
+                assert i is not None
+
+            elif isinstance(n, ControlSequence) and n.name in ["[", "("]:
+                i_box = [None]
+                result.append(Environment(
+                    n.name, (), (),
+                    self.map_iterable(
+                        nodes, i=i+1, end_i_box=i_box,
+                        env_name=n.name)))
+                i = i_box[0]
+                assert i is not None
+
+            elif isinstance(n, ControlSequence) and n.name in ["]", ")"]:
+                assert env_name in "[("
+                assert end_i_box is not None
+                end_i_box[0] = i+1
+                return result
+
+            elif isinstance(n, _MathDelimiter):
+                math_env_name = math_delim_to_env_name(n)
+
+                if env_name == math_env_name:
+                    # end math
+                    assert end_i_box is not None
+                    end_i_box[0] = i+1
+                    return result
+                else:
+                    # begin math
+                    i_box = [None]
+                    result.append(Environment(
+                        math_env_name, (), (),
+                        self.map_iterable(
+                            nodes, i=i+1, end_i_box=i_box,
+                            env_name=math_env_name)))
+                    i = i_box[0]
+                    assert i is not None
+
+            else:
+                result.append(n)
+                i += 1
+
+        if env_name is not None:
+            raise ValueError("missing end of environment '%s'" % env_name)
+
+        return result
 
 # }}}
 
@@ -696,10 +876,10 @@ def parse_latex(s, csname_to_arg_counts=None, envname_to_arg_counts=None):
     if envname_to_arg_counts is None:
         envname_to_arg_counts = ENVNAME_TO_ARG_COUNTS
 
-    doc = LatexDocContainer(tuple(tokenize(
-        s, i=0,
-        csname_to_arg_counts=csname_to_arg_counts,
-        envname_to_arg_counts=envname_to_arg_counts)))
+    doc = LatexDocContainer(tuple(tokenize(s)))
+    doc = ArgumentGatherer(
+            csname_to_arg_counts=csname_to_arg_counts,
+            envname_to_arg_counts=envname_to_arg_counts).rec(doc)
     doc = EnvironmentGatherer().rec(doc)
     return doc
 
