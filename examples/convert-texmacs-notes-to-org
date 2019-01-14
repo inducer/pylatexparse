@@ -51,7 +51,6 @@ UNWRAPPABLE_CSEQS = [
 class IndentingStringifyMapper(StringifyMapper):
     def __init__(self, indentation):
         self.indentation = indentation
-        self.eat_newline_if_next = False
 
     def map_eol(self, node):
         return "\n" + " "*self.indentation
@@ -63,6 +62,43 @@ class IndentingStringifyMapper(StringifyMapper):
             return self.rec(node.content[0])
         else:
             return super().map_group(node)
+
+    def map_environment(self, node):
+        if node.name == "$":
+            return r"\(%s\)" % (
+                    (
+                        "".join(self.rec(ch) for ch in node.content)
+                        ).strip().replace("\n", " ")
+                        )
+        if node.name == "$$":
+            return r"\[%s\]" % (
+                    "".join(self.rec(ch) for ch in node.content))
+        elif node.name == "(":
+            return r"\(%s\)" % (
+                    "".join(self.rec(ch) for ch in node.content))
+        elif node.name == "[":
+            return r"\[%s\]" % (
+                    "".join(self.rec(ch) for ch in node.content))
+
+        args = (
+            "".join("[%s]" % self.rec(arg) for arg in node.optargs)
+            +
+            "".join("{%s}" % self.rec(arg) for arg in node.args)
+            )
+
+        prev_indentation = self.indentation
+        self.indentation += 2
+        content = "".join(self.rec(ch) for ch in node.content)
+        content = content.strip()
+        self.indentation = prev_indentation
+
+        return "\n%s\\begin{%s}%s\n%s%s\n%s\\end{%s}" % (
+                self.indentation*" ",
+                node.name, args,
+                (self.indentation + 2)*" ",
+                content,
+                self.indentation*" ",
+                node.name)
 
 
 class OrgPrinter(Mapper):
@@ -86,6 +122,7 @@ class OrgPrinter(Mapper):
             lines = strmap.rec(s).split("\n")
             self.result.append(lines[0])
             for l in lines[1:]:
+                self.result.append("\n")
                 self.result.append(l)
         else:
             self.result.append(s)
@@ -145,8 +182,9 @@ class OrgPrinter(Mapper):
             self.rec(ch)
 
     def map_text(self, node):
-        assert "\n" not in node.text
         self.eprint(node.text)
+
+    map_whitespace = map_text
 
     def map_group(self, node):
         if (len(node.content) == 1
@@ -169,7 +207,7 @@ class OrgPrinter(Mapper):
             self.print(f"** {node.args[0]}")
         elif node.name == "subsubsection":
             self.ensure_newline()
-            self.print(f"*** {node.args[0]}")
+            self.print(f"** (SUB) {node.args[0]}")
 
         elif node.name in ["\n", "newpage"]:
             pass
@@ -222,8 +260,11 @@ class OrgPrinter(Mapper):
             self.ensure_newline()
             self.print(r"#+LATEX: \end{hidden}")
 
+        elif node.name in ["&", "#", "%"]:
+            self.eprint(node.name)
+
         elif node.name in [
-                "\"", "&", "#", "%",
+                "\"",
                 "vspace", "vspace*",
                 "resizebox",
                 "includegraphics",
@@ -241,9 +282,9 @@ class OrgPrinter(Mapper):
         elif node.name == "stitle":
             self.ensure_newline()
             if node.args:
-                self.print(f"**** {node.args[0]}")
+                self.print(f"*** {node.args[0]}")
             else:
-                self.print(f"**** (no title)")
+                self.print(f"*** (no title)")
 
         else:
             raise NotImplementedError(
@@ -255,12 +296,16 @@ class OrgPrinter(Mapper):
             for ch in node.content:
                 self.rec(ch)
             self.enum_kinds.pop()
+            self.ensure_newline()
+            self.eprint(self._indent()*" ")
 
         elif node.name == "enumerate":
             self.enum_kinds.append("enumerate")
             for ch in node.content:
                 self.rec(ch)
             self.enum_kinds.pop()
+            self.ensure_newline()
+            self.eprint(self._indent()*" ")
 
         elif node.name == "center":
             self.ensure_newline()
@@ -273,6 +318,8 @@ class OrgPrinter(Mapper):
         elif node.name in [
                 "$", "(", "$$", "[",
                 "align", "align*", "alignat*",
+                "equation",
+                "equation*",
                 "eqnarray*",
                 "theorem",
                 "tabular",
