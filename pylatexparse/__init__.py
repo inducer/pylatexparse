@@ -668,6 +668,26 @@ def tokenize(
 # }}}
 
 
+class InlineMathWhiteSpaceEater(IdentityMapper):
+    def map_environment(self, node):
+        if node.name == "$":
+            content = node.content
+            i = 0
+            while i < len(content) and isinstance(content[i], WhiteSpace):
+                i += 1
+
+            j = len(content)-1
+            while j >= 0 and isinstance(content[j], WhiteSpace):
+                j -= 1
+
+            return type(node)(
+                    node.name, (), (),
+                    tuple(self.rec(ch) for ch in content[i:j+1]))
+
+        else:
+            return super().map_environment(node)
+
+
 def parse_latex(s, csname_to_arg_counts=None, envname_to_arg_counts=None):
     if csname_to_arg_counts is None:
         csname_to_arg_counts = CSNAME_TO_ARG_COUNTS

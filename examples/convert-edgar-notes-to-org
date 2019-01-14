@@ -4,6 +4,7 @@ import sys
 from pylatexparse import (
         CSNAME_TO_ARG_COUNTS as CSNAME_TO_ARG_COUNTS_BASE,
         parse_latex, Mapper, StringifyMapper,
+        InlineMathWhiteSpaceEater,
         LatexDoc, ControlSequence)
 
 CSNAME_TO_ARG_COUNTS = CSNAME_TO_ARG_COUNTS_BASE.copy()
@@ -282,6 +283,7 @@ def main():
                 inf.read(),
                 csname_to_arg_counts=CSNAME_TO_ARG_COUNTS)
 
+            doc = InlineMathWhiteSpaceEater().rec(doc)
             org_printer = OrgPrinter()
             try:
                 org_printer.rec(doc)
