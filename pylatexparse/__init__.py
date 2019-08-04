@@ -23,7 +23,7 @@ THE SOFTWARE.
 import re
 
 CSEQ_RE = re.compile(
-        r"\\(%|#|&|_|\n|,|;|\\|\(|\)|\{|\}| |\[|\]|\"|[a-zA-Z*]+)")
+        r"\\(`|'|\||\%|#|&|_|\n|,|;|\\|\(|\)|\{|\}| |\[|\]|\"|[a-zA-Z*]+)")
 ENVNAME_RE = re.compile(r"^([a-zA-Z*]+)\s*$")
 
 
@@ -395,8 +395,10 @@ CSNAME_TO_ARG_COUNTS = {
         "cr": (1, 0),
         "phantom": (1, 0),
         "overset": (1, 0),
+        "underset": (1, 0),
 
         "newpage": (0, 0),
+        "hspace": (1, 0),
         "vspace": (1, 0),
         "vspace*": (1, 0),
         "resizebox": (2, 0),
@@ -432,6 +434,7 @@ CSNAME_TO_ARG_COUNTS = {
         "sum": (0, 0),
         "int": (0, 0),
         "prod": (0, 0),
+        "oint": (0, 0),
         "bigcup": (0, 0),
         "bigcap": (0, 0),
         "[": (0, 0),
@@ -439,12 +442,15 @@ CSNAME_TO_ARG_COUNTS = {
 
         "Alpha": (0, 0),
         "Delta": (0, 0),
+        "Gamma": (0, 0),
         "Sigma": (0, 0),
         "Omega": (0, 0),
         "Phi": (0, 0),
+        "Pi": (0, 0),
 
         "ell": (0, 0),
         "triangle": (0, 0),
+        "circ": (0, 0),
         "partial": (0, 0),
 
         "alpha": (0, 0),
@@ -470,13 +476,18 @@ CSNAME_TO_ARG_COUNTS = {
 
         "neq": (0, 0),
         "leq": (0, 0),
+        "ne": (0, 0),
+        "le": (0, 0),
+        "ge": (0, 0),
         "leqslant": (0, 0),
         "geqslant": (0, 0),
         "geq": (0, 0),
         "gg": (0, 0),
         "ll": (0, 0),
         "sim": (0, 0),
+        "not": (0, 0),
 
+        "angle": (0, 0),
         "approx": (0, 0),
         "perp": (0, 0),
         "equiv": (0, 0),
@@ -510,8 +521,11 @@ CSNAME_TO_ARG_COUNTS = {
         "huge": (0, 0),
         "Large": (0, 0),
         "large": (0, 0),
+        "Small": (0, 0),
+        "small": (0, 0),
         "scriptsize": (0, 0),
         "footnotesize": (0, 0),
+        "tiny": (0, 0),
         "tiny": (0, 0),
 
         "nobracket": (0, 0),
@@ -525,6 +539,7 @@ CSNAME_TO_ARG_COUNTS = {
         "pm": (0, 0),
 
         "lim": (0, 0),
+        "sup": (0, 0),
         "det": (0, 0),
         "max": (0, 0),
         "min": (0, 0),
@@ -532,8 +547,11 @@ CSNAME_TO_ARG_COUNTS = {
         "right": (0, 0),
         "underbrace": (1, 0),
         "overbrace": (1, 0),
+        "vec": (1, 0),
+        "overrightarrow": (1, 0),
 
         "mathcal": (1, 0),
+        "mathrm": (1, 0),
         "mathit": (1, 0),
         "mathbf": (1, 0),
         "mathbb": (1, 0),
@@ -560,6 +578,7 @@ CSNAME_TO_ARG_COUNTS = {
         "bf": (0, 0),
         "it": (0, 0),
 
+        "mapsto": (0, 0),
         "Leftrightarrow": (0, 0),
         "Rightarrow": (0, 0),
         "rightarrow": (0, 0),
@@ -581,6 +600,9 @@ CSNAME_TO_ARG_COUNTS = {
         "&": (0, 0),
         "#": (0, 0),
         "%": (0, 0),
+        "|": (0, 0),
+        "`": (0, 0),
+        "'": (0, 0),
         }
 
 ENVNAME_TO_ARG_COUNTS = {
@@ -593,6 +615,8 @@ ENVNAME_TO_ARG_COUNTS = {
         "align": (0, 0),
         "align*": (0, 0),
         "alignat*": (0, 0),
+        "gather": (0, 0),
+        "gather*": (0, 0),
         "eqnarray*": (0, 0),
         "bmatrix": (0, 0),
         "cases": (0, 0),
@@ -601,7 +625,9 @@ ENVNAME_TO_ARG_COUNTS = {
         "array": (1, 0),
         "matrix": (1, 0),
 
-        "theorem": (1, 1),
+        "theorem": (0, 1),
+        "definition": (0, 1),
+        "corollary": (0, 1),
         }
 
 # }}}

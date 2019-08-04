@@ -3,6 +3,7 @@
 import sys
 from pylatexparse import (
         CSNAME_TO_ARG_COUNTS as CSNAME_TO_ARG_COUNTS_BASE,
+        ENVNAME_TO_ARG_COUNTS as ENVNAME_TO_ARG_COUNTS_BASE,
         parse_latex, Mapper, StringifyMapper,
         InlineMathWhiteSpaceEater,
         LatexDoc, ControlSequence)
@@ -11,6 +12,7 @@ CSNAME_TO_ARG_COUNTS = CSNAME_TO_ARG_COUNTS_BASE.copy()
 
 CSNAME_TO_ARG_COUNTS.update({
         "tmtextbf": (1, 0),
+        "tmtexttt": (1, 0),
         "tmem": (1, 0),
         "tmtt": (1, 0),
         "tmtextit": (1, 0),
@@ -23,14 +25,32 @@ CSNAME_TO_ARG_COUNTS.update({
         "ip": (2, 0),
         "abs": (1, 0),
         "mathd": (0, 0),
+        "cdummy": (0, 0),
+        "plusball": (0, 0),
+        "minusball": (0, 0),
+        "okball": (0, 0),
+        "prime": (0, 0),
+        "nin": (0, 0),
+        "mp": (0, 0),
+        "inf": (0, 0),
 
         "demo": (1, 0),
         "inclass": (1, 0),
         "tmunfolded": (2, 0),
+        "tmunfoldedio": (3, 0),
+        "tminput": (1, 0),
+        "tmoutput": (1, 0),
+        "tmsession": (3, 0),
         "\n": (0, 0),
         "stitle": (1, 0),
 
         })
+
+ENVNAME_TO_ARG_COUNTS = ENVNAME_TO_ARG_COUNTS_BASE.copy()
+
+ENVNAME_TO_ARG_COUNTS.update({
+    "tmframed": (0, 0),
+    })
 
 
 UNWRAPPABLE_CSEQS = [
@@ -184,7 +204,11 @@ class OrgPrinter(Mapper):
     def map_text(self, node):
         self.eprint(node.text)
 
-    map_whitespace = map_text
+    def map_whitespace(self, node):
+        if self.enum_kinds and len(self.result) > 2 and self.result[-1] == node.text:
+            return
+
+        self.eprint(node.text)
 
     def map_group(self, node):
         if (len(node.content) == 1
@@ -199,6 +223,8 @@ class OrgPrinter(Mapper):
             self.eprint("}")
 
     def map_controlseq(self, node):
+        if node.name == "nobracket":
+            return
         if node.name == "section":
             self.ensure_newline()
             self.print(f"* {node.args[0]}")
@@ -260,22 +286,23 @@ class OrgPrinter(Mapper):
             self.ensure_newline()
             self.print(r"#+LATEX: \end{hidden}")
 
-        elif node.name in ["&", "#", "%"]:
-            self.eprint(node.name)
-
         elif node.name in [
-                "\"",
-                "vspace", "vspace*",
+                "\"", "&", "#", "%", "_", "'", "`",
+                "vspace", "vspace*", "hspace",
                 "resizebox",
                 "includegraphics",
                 " ", "\\",
                 "smallskip", "medskip", "bigskip",
                 "quad",
-                "footnotesize",
+                "footnotesize", "scriptsize",
                 "eqref",
                 "footnote",
-                "huge",
-                "demo", "inclass",
+                "small", "huge", "tiny",
+                "demo",
+                "inclass",
+                "raisebox",
+                "color",
+                "tmsession",
                 ]:
             self.eprint(node)
 
@@ -315,17 +342,40 @@ class OrgPrinter(Mapper):
             self.ensure_newline()
             self.print("#+END_CENTER")
 
+        elif node.name == "tmframed":
+            self.ensure_newline()
+            self.print(
+                    r"#+LATEX: \begin{tcolorbox}")
+            for ch in node.content:
+                self.rec(ch)
+            self.ensure_newline()
+            self.print(r"#+LATEX: \end{tcolorbox}")
+
         elif node.name in [
                 "$", "(", "$$", "[",
                 "align", "align*", "alignat*",
+                "gather", "gather*",
                 "equation",
                 "equation*",
                 "eqnarray*",
-                "theorem",
                 "tabular",
                 ]:
             self.eprint(node)
 
+        elif node.name in [
+                "definition",
+                "theorem",
+                "corollary",
+                ]:
+            self.ensure_newline()
+            if node.optargs:
+                self.print(fr"#+LATEX: \begin{{{node.name}}}[{node.optargs[0]}]")
+            else:
+                self.print(fr"#+LATEX: \begin{{definition}}")
+            for ch in node.content:
+                self.rec(ch)
+            self.ensure_newline()
+            self.print(fr"#+LATEX: \end{{{node.name}}}")
         else:
             raise NotImplementedError(
                     rf"do not know how to handle '{node.name}' env")
@@ -336,7 +386,8 @@ def main():
         with open(fname, "r") as inf:
             doc = parse_latex(
                 inf.read(),
-                csname_to_arg_counts=CSNAME_TO_ARG_COUNTS)
+                csname_to_arg_counts=CSNAME_TO_ARG_COUNTS,
+                envname_to_arg_counts=ENVNAME_TO_ARG_COUNTS)
 
             doc = InlineMathWhiteSpaceEater().rec(doc)
             org_printer = OrgPrinter()
