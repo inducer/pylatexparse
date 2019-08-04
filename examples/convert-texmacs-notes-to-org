@@ -286,8 +286,11 @@ class OrgPrinter(Mapper):
             self.ensure_newline()
             self.print(r"#+LATEX: \end{hidden}")
 
+        elif node.name in ["#", "%"]:
+            self.eprint(node.name)
+
         elif node.name in [
-                "\"", "&", "#", "%", "_", "'", "`",
+                "\"", "&", "_", "'", "`",
                 "vspace", "vspace*", "hspace",
                 "resizebox",
                 "includegraphics",
