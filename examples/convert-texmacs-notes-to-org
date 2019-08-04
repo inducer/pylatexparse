@@ -371,7 +371,7 @@ class OrgPrinter(Mapper):
             if node.optargs:
                 self.print(fr"#+LATEX: \begin{{{node.name}}}[{node.optargs[0]}]")
             else:
-                self.print(fr"#+LATEX: \begin{{definition}}")
+                self.print(fr"#+LATEX: \begin{{{node.name}}}")
             for ch in node.content:
                 self.rec(ch)
             self.ensure_newline()
