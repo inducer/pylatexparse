@@ -412,8 +412,8 @@ CSNAME_TO_ARG_COUNTS = {
         "centering": (0, 0),
         "includegraphics": (1, 1),
 
-        "textcolor": (1, 0),
-        "color": (1, 0),
+        "textcolor": (1, 1),
+        "color": (1, 1),
         "textbf": (1, 0),
         "textit": (1, 0),
         "emph": (1, 0),
