@@ -4,8 +4,8 @@
 from setuptools import setup, find_packages
 
 setup(name="pylatexparse",
-      version="2019.1",
-      description="Extensions for pycparser",
+      version="2019.2",
+      description="A parser and document tree for LaTeX documents",
       long_description=open("README.rst", "r").read(),
       classifiers=[
           'Development Status :: 4 - Beta',
@@ -19,7 +19,7 @@ setup(name="pylatexparse",
           ],
 
       author="Andreas Kloeckner",
-      url="http://pypi.python.org/pypi/pylatexparse",
+      url="https://github.com/inducer/pylatexparse",
       author_email="inform@tiker.net",
       license="MIT",
       packages=find_packages())
