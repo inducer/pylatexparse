@@ -17,7 +17,7 @@ setup(name="pylatexparse",
           'Programming Language :: Python :: 3',
           'Topic :: Utilities',
           ],
-
+      python_requires='~=3.6',
       author="Andreas Kloeckner",
       url="https://github.com/inducer/pylatexparse",
       author_email="inform@tiker.net",
